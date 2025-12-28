@@ -3,12 +3,13 @@
 # image obs topics
 FRONT_IMAGE_TOPIC = "/usb_cam_front/image_raw"
 REVERSE_IMAGE_TOPIC = "/usb_cam_reverse/image_raw"
-IMAGE_TOPIC = "/camera/camera/color/image_raw"
+IMAGE_TOPIC = "/front/camera_image"
 
 # exploration topics
 SUBGOALS_TOPIC = "/subgoals"
 GRAPH_NAME_TOPIC = "/graph_name"
 WAYPOINT_TOPIC = "/waypoint"
+CHOSEN_TRAJECTORY_TOPIC = "/chosen_trajectory"
 REVERSE_MODE_TOPIC = "/reverse_mode"
 SAMPLED_OUTPUTS_TOPIC = "/sampled_outputs"
 REACHED_GOAL_TOPIC = "/topoplan/reached_goal"
@@ -34,3 +35,4 @@ BUMPER_TOPIC = "/mobile_base/events/bumper"
 JOY_BUMPER_TOPIC = "/joy_bumper"
 
 # move the robot
+ROBOT_CONFIG_PATH ="../config/robot.yaml"

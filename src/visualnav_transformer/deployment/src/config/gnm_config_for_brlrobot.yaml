@@ -1,0 +1,31 @@
+# GNM/ViNT/Nomad Navigation Configuration for BRL Robot
+# These values serve as defaults and can be overridden by command-line arguments.
+
+# --- Model Configuration ---
+# model: "nomad" (default) or other supported models in config/models.yaml
+model: "gnm" 
+
+# device: "cuda" (default) or "cpu"
+device: "cpu"
+
+# --- Topomap Configuration ---
+# dir: "topomap" (default) - Name of the folder in deployment/topomaps/images/{topomap}
+dir: "map2"
+
+# goal_node: -1 (default) - Index of the goal node. -1 means the last node.
+goal_node: -1
+
+# --- Navigation Parameters ---
+# waypoint: 2 (default) - Index of the predicted waypoint to track (0-based).
+# Increase this if increasing frame_rate/control frequency to avoid oscillation.
+# GNM: [0,4]
+waypoint: 4
+
+# close_threshold: 3 (default) - Distance threshold to determine if a node is reached/close.
+close_threshold: 3
+
+# radius: 4 (default) - Temporal search radius for localization (number of nodes).
+radius: 4
+
+# num_samples: 8 (default) - Number of actions sampled from the exploration model.
+num_samples: 8

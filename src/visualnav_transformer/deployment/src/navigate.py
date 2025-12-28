@@ -32,7 +32,7 @@ from visualnav_transformer.train.vint_train.training.train_utils import get_acti
 MODEL_WEIGHTS_PATH = "model_weights"
 ROBOT_CONFIG_PATH = "config/robot.yaml"
 MODEL_CONFIG_PATH = "config/models.yaml"
-TOPOMAP_IMAGES_DIR = "topomaps/images"
+TOPOMAP_IMAGES_DIR = "../topomaps/images"
 with open(ROBOT_CONFIG_PATH, "r") as f:
     robot_config = yaml.safe_load(f)
 MAX_V = robot_config["max_v"]
@@ -71,7 +71,7 @@ class NavigationNode(Node):
         )
 
 
-def main(args: argparse.Namespace):
+def main(args: argparse.Namespace, device: torch.device):
     global context_size
 
     # load model parameters
@@ -98,13 +98,18 @@ def main(args: argparse.Namespace):
     model = model.to(device)
     model.eval()
 
-    num_diffusion_iters = model_params["num_diffusion_iters"]
-    noise_scheduler = DDPMScheduler(
-        num_train_timesteps=model_params["num_diffusion_iters"],
-        beta_schedule="squaredcos_cap_v2",
-        clip_sample=True,
-        prediction_type="epsilon",
-    )
+    # Initialize diffusion scheduler only for nomad model
+    if model_params["model_type"] == "nomad":
+        num_diffusion_iters = model_params["num_diffusion_iters"]
+        noise_scheduler = DDPMScheduler(
+            num_train_timesteps=model_params["num_diffusion_iters"],
+            beta_schedule="squaredcos_cap_v2",
+            clip_sample=True,
+            prediction_type="epsilon",
+        )
+    else:
+        num_diffusion_iters = None
+        noise_scheduler = None
 
     # load topomap
     topomap_filenames = sorted(
@@ -233,20 +238,33 @@ def main(args: argparse.Namespace):
 
 
 if __name__ == "__main__":
+    # Load defaults from YAML config
+    BRL_CONFIG_PATH = "config/gnm_config_for_brlrobot.yaml"
+    brl_defaults = {}
+    if os.path.exists(BRL_CONFIG_PATH):
+        try:
+            with open(BRL_CONFIG_PATH, "r") as f:
+                brl_defaults = yaml.safe_load(f) or {}
+            print(f"Loaded configuration from {BRL_CONFIG_PATH}")
+        except Exception as e:
+            print(f"Warning: Failed to load config from {BRL_CONFIG_PATH}: {e}")
+    else:
+        print(f"Warning: Config file {BRL_CONFIG_PATH} not found. Using hardcoded defaults.")
+
     parser = argparse.ArgumentParser(
         description="Code to run GNM DIFFUSION EXPLORATION on the locobot"
     )
     parser.add_argument(
         "--model",
         "-m",
-        default="nomad",
+        default=brl_defaults.get("model", "nomad"),
         type=str,
         help="model name (only nomad is supported) (hint: check config/models.yaml) (default: nomad)",
     )
     parser.add_argument(
         "--waypoint",
         "-w",
-        default=2,  # close waypoints exihibit straight line motion (the middle waypoint is a good default)
+        default=brl_defaults.get("waypoint", 2),  # close waypoints exihibit straight line motion (the middle waypoint is a good default)
         type=int,
         help=f"""index of the waypoint used for navigation (between 0 and 4 or
         how many waypoints your model predicts) (default: 2)""",
@@ -254,14 +272,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dir",
         "-d",
-        default="topomap",
+        default=brl_defaults.get("dir", "topomap"),
         type=str,
         help="path to topomap images",
     )
     parser.add_argument(
         "--goal-node",
         "-g",
-        default=-1,
+        default=brl_defaults.get("goal_node", -1),
         type=int,
         help="""goal node index in the topomap (if -1, then the goal node is
         the last node in the topomap) (default: -1)""",
@@ -269,7 +287,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--close-threshold",
         "-t",
-        default=3,
+        default=brl_defaults.get("close_threshold", 3),
         type=int,
         help="""temporal distance within the next node in the topomap before
         localizing to it (default: 3)""",
@@ -277,7 +295,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--radius",
         "-r",
-        default=4,
+        default=brl_defaults.get("radius", 4),
         type=int,
         help="""temporal number of locobal nodes to look at in the topopmap for
         localization (default: 2)""",
@@ -285,10 +303,24 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num-samples",
         "-n",
-        default=8,
+        default=brl_defaults.get("num_samples", 8),
         type=int,
         help=f"Number of actions sampled from the exploration model (default: 8)",
     )
+    parser.add_argument(
+        "--device",
+        "-dev",
+        default=brl_defaults.get("device", "cuda"),
+        type=str,
+        help="device to run the model on (default: cuda)",
+    )
     args = parser.parse_args()
+    
+    if args.device == "cuda" and not torch.cuda.is_available():
+        print("CUDA not available, using CPU")
+        device = torch.device("cpu")
+    else:
+        device = torch.device(args.device)
+        
     print(f"Using {device}")
-    main(args)
+    main(args, device)
