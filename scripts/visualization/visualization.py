@@ -23,6 +23,7 @@ class GNMVisualizer(Node):
         
         # Publishers
         self.marker_pub = self.create_publisher(MarkerArray, "/visualization_marker_array", qos_profile)
+        self.annotated_image_pub = self.create_publisher(Image, "/gnm/annotated_image", qos_profile)
         
         # Subscribers
         self.waypoint_sub = self.create_subscription(
@@ -41,6 +42,9 @@ class GNMVisualizer(Node):
         self.bridge = CvBridge()
         self.current_image = None
         
+        # 检测 OpenCV GUI 支持
+        self.has_gui = self._check_gui_support()
+        
         # 数据缓存
         self.last_waypoint = None
         self.last_chosen_traj = None
@@ -53,13 +57,33 @@ class GNMVisualizer(Node):
         # 尝试从参数服务器获取轨迹长度，默认为 8
         self.declare_parameter("len_traj_pred", 8)
         self.len_traj_pred = self.get_parameter("len_traj_pred").value
+
+        # Declare waypoint index parameter
+        self.declare_parameter("waypoint_index", 2)
         
         # 用于限流日志的计时器
         self.last_log_time = time.time()
         
         self.get_logger().info(f"GNM Visualizer 启动成功！预测轨迹长度设为: {self.len_traj_pred}")
-        self.get_logger().info("可视化模式: OpenCV 窗口直接显示 (包含投影轨迹和雷达图)")
+        if self.has_gui:
+            self.get_logger().info("可视化模式: OpenCV 窗口直接显示 (包含投影轨迹和雷达图)")
+        else:
+            self.get_logger().warn("OpenCV GUI 不可用，将通过 ROS 话题发布图像")
+            self.get_logger().info("  查看方式: ros2 run rqt_image_view rqt_image_view")
+            self.get_logger().info("  话题名称: /gnm/annotated_image")
         self.get_logger().info("同时保留 RViz MarkerArray 订阅 /visualization_marker_array 话题")
+
+    def _check_gui_support(self):
+        """检测 OpenCV 是否支持 GUI 显示"""
+        try:
+            # 尝试创建一个测试窗口
+            test_img = np.zeros((10, 10, 3), dtype=np.uint8)
+            cv2.imshow("__test__", test_img)
+            cv2.destroyWindow("__test__")
+            cv2.waitKey(1)
+            return True
+        except:
+            return False
 
     def _find_image_topic(self):
         """自动寻找包含 'image' 或 'camera' 的 Image 类型话题"""
@@ -263,15 +287,15 @@ class GNMVisualizer(Node):
             # 添加轨迹点
             # 假设轨迹是从 (0,0) 开始的相对坐标
             start_p = Point()
-            start_p.x = 0
-            start_p.y = 0
-            start_p.z = 0
+            start_p.x = 0.0
+            start_p.y = 0.0
+            start_p.z = 0.0
             marker.points.append(start_p)
             
             for j in range(self.len_traj_pred):
                 p = Point()
-                p.x = trajectories[i, j, 0]
-                p.y = trajectories[i, j, 1]
+                p.x = float(trajectories[i, j, 0])
+                p.y = float(trajectories[i, j, 1])
                 p.z = 0.0
                 marker.points.append(p)
             
@@ -296,7 +320,7 @@ class GNMVisualizer(Node):
                     
                     for pt in traj:
                         u, v = self._project(pt[0], pt[1], w, h)
-                        cv2.circle(overlay, (u, v), 2, (255, 100, 0), -1) 
+                        cv2.circle(overlay, (u, v), 2, (255, 100, 0), -1)
                         points.append((u, v))
                     
                     last_p = (u0, v0)
@@ -314,7 +338,7 @@ class GNMVisualizer(Node):
                 u0, v0 = self._project(0, 0, w, h)
                 for pt in self.last_chosen_traj:
                     u, v = self._project(pt[0], pt[1], w, h)
-                    cv2.circle(img, (u, v), 4, (0, 255, 255), -1) 
+                    cv2.circle(img, (u, v), 4, (0, 255, 255), -1)
                     points.append((u, v))
                 
                 last_p = (u0, v0)
@@ -322,14 +346,39 @@ class GNMVisualizer(Node):
                     cv2.line(img, last_p, p, (0, 255, 255), 4)
                     last_p = p
 
-            # 2. 绘制选中的目标路标点 (红色)
-            # 动态获取当前使用的 waypoint_index
-            try:
-                waypoint_idx = self.get_parameter("waypoint_index").value
-            except:
-                waypoint_idx = 2
+            # 2. 绘制从 /waypoint 话题接收的目标点 (洋红色大星星)
+            if self.last_waypoint is not None and len(self.last_waypoint) >= 2:
+                wp_u, wp_v = self._project(self.last_waypoint[0], self.last_waypoint[1], w, h)
+                # 绘制大星星标记
+                cv2.drawMarker(img, (wp_u, wp_v), (255, 0, 255), cv2.MARKER_STAR, 30, 3)
+                cv2.putText(img, "Goal", (wp_u + 15, wp_v - 15), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 2)
+
+            # 3. 绘制选中轨迹上的目标点 (红色)
+            # 自动匹配逻辑：在选中的轨迹中寻找与 /waypoint 最近的点作为索引
+            waypoint_idx = -1
+            if self.last_chosen_traj is not None and self.last_waypoint is not None:
+                min_dist = float('inf')
+                for i, pt in enumerate(self.last_chosen_traj):
+                    # 计算距离
+                    dist = (pt[0] - self.last_waypoint[0])**2 + (pt[1] - self.last_waypoint[1])**2
+                    if dist < min_dist:
+                        min_dist = dist
+                        waypoint_idx = i
+                
+                # 如果找不到匹配点（距离过大），则回退到默认参数或跳过
+                if min_dist > 0.1: # 允许一定的误差
+                     try:
+                        waypoint_idx = self.get_parameter("waypoint_index").value
+                     except:
+                        waypoint_idx = 2
+            else:
+                 try:
+                    waypoint_idx = self.get_parameter("waypoint_index").value
+                 except:
+                    waypoint_idx = 2
             
-            if self.last_chosen_traj is not None and len(self.last_chosen_traj) > waypoint_idx:
+            if self.last_chosen_traj is not None and len(self.last_chosen_traj) > waypoint_idx and waypoint_idx >= 0:
                 wpt = self.last_chosen_traj[waypoint_idx]
                 u, v = self._project(wpt[0], wpt[1], w, h)
                 cv2.circle(img, (u, v), 12, (0, 0, 255), -1) # 红色大圆点
@@ -367,8 +416,8 @@ class GNMVisualizer(Node):
             # 4. 添加图例 (Legend)
             legend_x, legend_y = 20, 30
             # 背景板
-            cv2.rectangle(img, (legend_x-10, legend_y-20), (legend_x+220, legend_y+65), (0,0,0), -1)
-            cv2.rectangle(img, (legend_x-10, legend_y-20), (legend_x+220, legend_y+65), (150,150,150), 1)
+            cv2.rectangle(img, (legend_x-10, legend_y-20), (legend_x+220, legend_y+90), (0,0,0), -1)
+            cv2.rectangle(img, (legend_x-10, legend_y-20), (legend_x+220, legend_y+90), (150,150,150), 1)
             
             # 候选轨迹
             cv2.line(img, (legend_x, legend_y), (legend_x+30, legend_y), (255, 100, 0), 2)
@@ -378,15 +427,35 @@ class GNMVisualizer(Node):
             cv2.line(img, (legend_x, legend_y+25), (legend_x+30, legend_y+25), (0, 255, 255), 3)
             cv2.putText(img, "Chosen Path", (legend_x+40, legend_y+30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             
-            # 目标点
-            cv2.circle(img, (legend_x+15, legend_y+50), 6, (0, 0, 255), -1)
-            cv2.putText(img, "Target Waypoint", (legend_x+40, legend_y+55), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            # 最终目标点
+            cv2.drawMarker(img, (legend_x+15, legend_y+50), (255, 0, 255), cv2.MARKER_STAR, 15, 2)
+            cv2.putText(img, "Goal Waypoint", (legend_x+40, legend_y+55), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            
+            # 轨迹目标点
+            cv2.circle(img, (legend_x+15, legend_y+75), 6, (0, 0, 255), -1)
+            cv2.putText(img, "Traj Target", (legend_x+40, legend_y+80), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
             # 3. 绘制雷达图 (右上角)
             self._draw_radar(img)
 
-            cv2.imshow("GNM Observation (Annotated)", img)
-            cv2.waitKey(1)
+            # 尝试直接显示（如果支持 GUI）
+            if self.has_gui:
+                try:
+                    cv2.imshow("GNM Observation (Annotated)", img)
+                    cv2.waitKey(1)
+                except:
+                    self.has_gui = False  # GUI 失效，切换到发布模式
+                    self.get_logger().warn("OpenCV 窗口显示失败，切换到话题发布模式")
+            
+            # 同时发布 ROS 话题（总是执行，方便调试）
+            try:
+                annotated_msg = self.bridge.cv2_to_imgmsg(img, "bgr8")
+                annotated_msg.header.stamp = msg.header.stamp
+                annotated_msg.header.frame_id = msg.header.frame_id
+                self.annotated_image_pub.publish(annotated_msg)
+            except Exception as e:
+                self.get_logger().error(f"Failed to publish annotated image: {e}")
+                
         except Exception as e:
             self.get_logger().error(f"Image callback error: {e}")
 
@@ -459,14 +528,20 @@ class GNMVisualizer(Node):
 
 def main(args=None):
     rclpy.init(args=args)
+    visualizer = None
     try:
         visualizer = GNMVisualizer()
         rclpy.spin(visualizer)
     except KeyboardInterrupt:
         pass
     finally:
-        cv2.destroyAllWindows()
-        visualizer.destroy_node()
+        if visualizer is not None:
+            if visualizer.has_gui:
+                try:
+                    cv2.destroyAllWindows()
+                except:
+                    pass
+            visualizer.destroy_node()
         rclpy.shutdown()
 
 if __name__ == "__main__":

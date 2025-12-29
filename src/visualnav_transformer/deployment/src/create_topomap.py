@@ -1,6 +1,7 @@
 import argparse
 import os
 import time
+import shutil
 
 import rclpy
 from rclpy.node import Node
@@ -8,7 +9,12 @@ from sensor_msgs.msg import Image, Joy
 from visualnav_transformer.deployment.src.utils import msg_to_pil
 
 from visualnav_transformer.deployment.src.topic_names import IMAGE_TOPIC
-TOPOMAP_IMAGES_DIR = "topomaps/images"
+
+# Use absolute path relative to this script
+# Script is in .../deployment/src/
+# Images should be in .../deployment/topomaps/images/
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+TOPOMAP_IMAGES_DIR = os.path.join(SCRIPT_DIR, "../topomaps/images")
 obs_img = None
 
 def remove_files_in_dir(dir_path: str):

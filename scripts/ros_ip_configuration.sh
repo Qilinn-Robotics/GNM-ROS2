@@ -1,2 +1,4 @@
+# TODO：Change to ROS2 format
+
 export ROS_IP=192.168.3.100
 export ROS_MASTER_URI=http://192.168.3.101:11311

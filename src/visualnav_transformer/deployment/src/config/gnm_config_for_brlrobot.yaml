@@ -10,7 +10,7 @@ device: "cpu"
 
 # --- Topomap Configuration ---
 # dir: "topomap" (default) - Name of the folder in deployment/topomaps/images/{topomap}
-dir: "map2"
+dir: "exp1229_1"
 
 # goal_node: -1 (default) - Index of the goal node. -1 means the last node.
 goal_node: -1

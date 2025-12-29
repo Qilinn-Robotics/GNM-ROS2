@@ -12,6 +12,10 @@ from PIL import Image as PILImage
 from sensor_msgs.msg import Image
 from torchvision import transforms
 
+import sys
+import visualnav_transformer.train.vint_train
+sys.modules["vint_train"] = visualnav_transformer.train.vint_train
+
 from visualnav_transformer.train.vint_train.data.data_utils import IMAGE_ASPECT_RATIO
 
 # models

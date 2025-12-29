@@ -13,5 +13,5 @@ kp_w: 0.2
 
 # topic names (modify for different robots/nodes)
 vel_teleop_topic: /cmd_vel_mux/input/teleop 
-vel_navi_topic: /cmd_vel_auto
+vel_navi_topic: /cmd_vel
 vel_recovery_topic: /cmd_vel_mux/input/recovery

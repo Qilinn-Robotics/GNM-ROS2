@@ -4,8 +4,9 @@ FROM osrf/ros:humble-desktop-full
 # 设置非交互前端
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 1. 配置 Ubuntu 清华源 (可选)
-RUN sed -i 's/archive.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
+# 1. 配置 Ubuntu 镜像源 (可选)
+RUN sed -i 's/[a-z]\+\.ubuntu\.com/mirrors.aliyun.com/g' /etc/apt/sources.list && \
+    sed -i 's/ports.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list
 
 # 2. 安装基础工具和 ROS 2 依赖
 RUN apt-get update && apt-get install -y \
@@ -33,13 +34,13 @@ RUN apt-get update && apt-get install -y \
     ros-humble-twist-mux \
     ros-humble-robot-localization \
     ros-humble-xacro \
-    # 导航相关 (Nav2) - 虽然 GNM 不直接用 Nav2，但可能有共用消息或工具
+    # 导航相关 (Nav2)
     ros-humble-navigation2 \
     ros-humble-nav2-bringup \
     && rm -rf /var/lib/apt/lists/*
 
-# 3. 配置 pip 清华源并升级 pip
-RUN pip3 config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple && \
+# 3. 配置 pip 镜像源并升级 pip
+RUN pip3 config set global.index-url https://mirrors.aliyun.com/pypi/simple && \
     pip3 install --no-cache-dir --upgrade pip
 
 # 4. 安装 ViNT/GNM 所需的 Python 依赖
@@ -47,15 +48,13 @@ RUN pip3 config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple &&
 RUN pip3 install --no-cache-dir --ignore-installed \
     torch \
     torchvision \
-    numpy \
+    numpy==1.24.3 \
     matplotlib \
     pyyaml \
     einops \
     vit_pytorch \
     prettytable \
-    # rospkg 在 ROS 2 中通常不需要，但为了兼容旧脚本可能还需要
     rospkg \
-    # === 新增依赖 (ViNT/NoMaD) ===
     efficientnet_pytorch \
     diffusers==0.11.1 \
     "huggingface_hub<0.14.0" \
@@ -65,21 +64,16 @@ RUN pip3 install --no-cache-dir --ignore-installed \
     scikit-learn \
     wandb \
     termcolor \
-    opencv-python \
     pandas \
     # ROS 2 Python 额外工具
     transforms3d
 
-# 5. 安装本地包 (ViNT 和 Diffusion Policy)
-# 将源码复制到 /opt 目录下并安装，这样即使 /code 被覆盖挂载，库依然可用
-COPY src/visualnav_transformer/train /opt/vint_train
-RUN pip3 install -e /opt/vint_train
+# 5. 设置开发环境路径 (可选)
+ENV PYTHONPATH="${PYTHONPATH}:/code/GNM-ROS2/src:/code/GNM-ROS2/third_party/diffusion_policy"
 
-COPY third_party/diffusion_policy /opt/diffusion_policy
-RUN pip3 install -e /opt/diffusion_policy
-
-# 6. 配置 ROS 2 环境自动加载
-RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc
+# 6. 配置 ROS 2 环境和开发包自动加载
+RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc && \
+    echo "[ -f /code/GNM-ROS2/scripts/install_gnm_dep.sh ] && /code/GNM-ROS2/scripts/install_gnm_dep.sh" >> /root/.bashrc
 
 # 7. 设置工作目录
 WORKDIR /code

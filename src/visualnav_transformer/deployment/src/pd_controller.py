@@ -13,9 +13,11 @@ from topic_names import REACHED_GOAL_TOPIC, WAYPOINT_TOPIC
 from utils import clip_angle
 
 # CONSTS
-CONFIG_PATH = "../config/robot.yaml"
+# Use absolute path relative to this script
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_PATH = os.path.join(SCRIPT_DIR, "config/robot.yaml")
 # Try to load the BRL config for PID gains
-BRL_CONFIG_PATH = "../../../../config/gnm_config_for_brlrobot.yaml"
+BRL_CONFIG_PATH = os.path.join(SCRIPT_DIR, "config/gnm_config_for_brlrobot.yaml")
 
 with open(CONFIG_PATH, "r") as f:
     robot_config = yaml.safe_load(f)
