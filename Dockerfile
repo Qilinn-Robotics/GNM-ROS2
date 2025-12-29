@@ -45,7 +45,7 @@ RUN pip3 config set global.index-url https://mirrors.aliyun.com/pypi/simple && \
 
 # 4. 安装 ViNT/GNM 所需的 Python 依赖
 # 对应 Ubuntu 22.04 (Python 3.10)
-RUN pip3 install --no-cache-dir --ignore-installed \
+RUN pip3 install \
     torch \
     torchvision \
     numpy==1.24.3 \
