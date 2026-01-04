@@ -44,39 +44,23 @@ RUN pip3 config set global.index-url https://mirrors.aliyun.com/pypi/simple && \
     pip3 install --no-cache-dir --upgrade pip
 
 # 4. 安装 ViNT/GNM 所需的 Python 依赖
-# 对应 Ubuntu 22.04 (Python 3.10)
-RUN pip3 install \
-    torch \
-    torchvision \
-    numpy==1.24.3 \
-    matplotlib \
-    pyyaml \
-    einops \
-    vit_pytorch \
-    prettytable \
-    rospkg \
-    efficientnet_pytorch \
-    diffusers==0.11.1 \
-    "huggingface_hub<0.14.0" \
-    git+https://github.com/ildoonet/pytorch-gradual-warmup-lr.git \
-    # === 通用依赖 ===
-    scipy \
-    scikit-learn \
-    wandb \
-    termcolor \
-    pandas \
-    # ROS 2 Python 额外工具
-    transforms3d
+WORKDIR /code/GNM-ROS2
+COPY requirements.txt .
+RUN pip3 install --ignore-installed --no-cache-dir -r requirements.txt
 
 # 5. 设置开发环境路径 (可选)
-ENV PYTHONPATH="${PYTHONPATH}:/code/GNM-ROS2/src:/code/GNM-ROS2/third_party/diffusion_policy"
+ENV PYTHONPATH="/code/GNM-ROS2/src:/code/GNM-ROS2/third_party/diffusion_policy"
 
-# 6. 配置 ROS 2 环境和开发包自动加载
-RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc && \
-    echo "[ -f /code/GNM-ROS2/scripts/install_gnm_dep.sh ] && /code/GNM-ROS2/scripts/install_gnm_dep.sh" >> /root/.bashrc
+# 6. 配置 ROS 2 环境
+RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc
 
-# 7. 设置工作目录
-WORKDIR /code
+# 7. 设置工作目录 (重复确认)
+WORKDIR /code/GNM-ROS2
+
+# 8. 安装本地依赖 (Diffusion Policy)
+# 将本地的 diffusion_policy 复制到镜像中并以可编辑模式安装
+COPY third_party/diffusion_policy /code/GNM-ROS2/third_party/diffusion_policy
+RUN pip3 install -e /code/GNM-ROS2/third_party/diffusion_policy
 
 # 启动命令
 CMD ["bash"]

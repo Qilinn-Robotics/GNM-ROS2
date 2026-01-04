@@ -2,7 +2,7 @@
 # 这是一个用于在容器内设置开发环境的脚本
 # 它会以可编辑模式 (-e) 安装本地包，这样你在宿主机修改代码，容器内会立即生效
 
-PROJECT_ROOT="/code/GNM-ROS2"
+PROJECT_ROOT=".."
 
 echo "Installing local packages in editable mode..."
 
@@ -17,5 +17,7 @@ if [ -d "$PROJECT_ROOT/third_party/diffusion_policy" ]; then
 else
     echo "Error: $PROJECT_ROOT/third_party/diffusion_policy not found!"
 fi
+
+export PYTHONPATH=$PYTHONPATH:$PROJECT_ROOT/src
 
 echo "Setup complete!"
