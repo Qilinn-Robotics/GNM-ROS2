@@ -10,6 +10,12 @@ import cv2
 from cv_bridge import CvBridge
 import time
 
+# 引入项目标准话题定义
+try:
+    from visualnav_transformer.deployment.src.topic_names import IMAGE_TOPIC
+except ImportError:
+    IMAGE_TOPIC = "/camera/image"
+
 class GNMVisualizer(Node):
     def __init__(self):
         super().__init__("gnm_visualizer")
@@ -86,21 +92,33 @@ class GNMVisualizer(Node):
             return False
 
     def _find_image_topic(self):
-        """自动寻找包含 'image' 或 'camera' 的 Image 类型话题"""
+        """自动寻找合适的图像话题，优先使用项目定义的 IMAGE_TOPIC"""
         # 等待话题列表可用
         time.sleep(1.0)
         topic_list = self.get_topic_names_and_types()
         
-        # 优先寻找包含 'front' 的
+        # 排除自身发布的话题
+        exclude_topics = ["/gnm/annotated_image"]
+        
+        # 1. 检查项目定义的标准话题是否存在
+        for topic, types in topic_list:
+            if topic == IMAGE_TOPIC and topic not in exclude_topics:
+                return topic
+
+        # 2. 优先寻找包含 'front' 且不含 'depth' 的
         for topic, types in topic_list:
             if 'sensor_msgs/msg/Image' in types and 'front' in topic:
-                return topic
-        # 其次寻找包含 'camera' 或 'image' 的
+                if topic not in exclude_topics and 'depth' not in topic.lower() and 'ir' not in topic.lower():
+                    return topic
+                    
+        # 3. 其次寻找包含 'camera' 或 'image' 的，但排除 'depth' 和 'ir'
         for topic, types in topic_list:
             if 'sensor_msgs/msg/Image' in types and ('camera' in topic or 'image' in topic):
-                return topic
-        # 默认值
-        return "/front/camera_image"
+                if topic not in exclude_topics and 'depth' not in topic.lower() and 'ir' not in topic.lower():
+                    return topic
+                    
+        # 4. 兜底返回
+        return IMAGE_TOPIC
         
     def chosen_traj_callback(self, msg):
         """Callback for the chosen trajectory"""

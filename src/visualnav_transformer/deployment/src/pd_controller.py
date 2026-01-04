@@ -6,7 +6,7 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 import yaml
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, TwistStamped
 from ros_data import ROSData
 from std_msgs.msg import Bool, Float32MultiArray
 from topic_names import REACHED_GOAL_TOPIC, WAYPOINT_TOPIC
@@ -40,6 +40,7 @@ if os.path.exists(BRL_CONFIG_PATH):
 MAX_V = robot_config["max_v"]
 MAX_W = robot_config["max_w"]
 VEL_TOPIC = robot_config["vel_navi_topic"]
+USE_STAMPED_VEL = robot_config.get("use_stamped_vel", False)
 DT = 1 / robot_config["frame_rate"]
 RATE = robot_config.get("control_frequency", 9)
 EPS = 1e-8
@@ -93,7 +94,11 @@ class PDController(Node):
         self.reached_goal_sub = self.create_subscription(
             Bool, REACHED_GOAL_TOPIC, self.callback_reached_goal, 1
         )
-        self.vel_out = self.create_publisher(Twist, VEL_TOPIC, 1)
+        
+        if USE_STAMPED_VEL:
+            self.vel_out = self.create_publisher(TwistStamped, VEL_TOPIC, 1)
+        else:
+            self.vel_out = self.create_publisher(Twist, VEL_TOPIC, 1)
         
         self.waypoint = ROSData(WAYPOINT_TIMEOUT, name="waypoint", clock=self.get_clock())
         self.reached_goal = False
@@ -112,6 +117,7 @@ class PDController(Node):
         self.get_logger().info(f"  KP_V: {KP_V}")
         self.get_logger().info(f"  KP_W: {KP_W}")
         self.get_logger().info(f"  Vel Topic: {VEL_TOPIC}")
+        self.get_logger().info(f"  Use Stamped Vel: {USE_STAMPED_VEL}")
         self.get_logger().info("------------------------------------------------")
         self.get_logger().info("Registered with master node. Waiting for waypoints...")
 
@@ -125,21 +131,28 @@ class PDController(Node):
         self.reached_goal = reached_goal_msg.data
 
     def control_loop(self):
-        self.vel_msg = Twist()
+        if USE_STAMPED_VEL:
+            msg = TwistStamped()
+            msg.header.stamp = self.get_clock().now().to_msg()
+            msg.header.frame_id = "base_link" # or appropriate frame
+            twist = msg.twist
+        else:
+            msg = Twist()
+            twist = msg
+
         if self.reached_goal:
-            self.vel_out.publish(self.vel_msg)
+            self.vel_out.publish(msg)
             self.get_logger().info("Reached goal! Stopping...")
-            # Ideally we might want to stop the node or just keep publishing 0
             return
         elif self.waypoint.is_valid(verbose=True):
             v, w = pd_controller(self.waypoint.get())
             if self.reverse_mode:
                 v *= -1
-            self.vel_msg.linear.x = float(v)
-            self.vel_msg.angular.z = float(w)
+            twist.linear.x = float(v)
+            twist.angular.z = float(w)
             self.get_logger().info(f"publishing new vel: {v:.2f}, {w:.2f}")
         
-        self.vel_out.publish(self.vel_msg)
+        self.vel_out.publish(msg)
 
 
 def main(args=None):

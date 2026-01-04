@@ -17,3 +17,4 @@ wandb
 termcolor
 pandas
 transforms3d
+opencv-python

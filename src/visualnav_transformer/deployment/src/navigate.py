@@ -134,11 +134,14 @@ class NavigationNode(Node):
         if len(self.context_queue) <= self.model_params["context_size"]:
             return
         
+        # Copy context queue to avoid thread safety issues during iteration
+        context_queue = list(self.context_queue)
+        
         waypoint_msg = Float32MultiArray()
         
         if self.model_params["model_type"] == "nomad":
             obs_images = transform_images(
-                self.context_queue, self.model_params["image_size"], center_crop=False
+                context_queue, self.model_params["image_size"], center_crop=False
             )
             obs_images = torch.split(obs_images, 3, dim=1)
             obs_images = torch.cat(obs_images, dim=1)
@@ -230,8 +233,11 @@ class NavigationNode(Node):
             
             batch_obs_imgs = []
             batch_goal_data = []
+            
+            # Pre-transform observation images once
+            transf_obs_img = transform_images(context_queue, self.model_params["image_size"])
+            
             for i, sg_img in enumerate(self.topomap[start: end + 1]):
-                transf_obs_img = transform_images(self.context_queue, self.model_params["image_size"])
                 goal_data = transform_images(sg_img, self.model_params["image_size"])
                 batch_obs_imgs.append(transf_obs_img)
                 batch_goal_data.append(goal_data)
@@ -361,7 +367,9 @@ def main(args: argparse.Namespace, device: torch.device):
     for i in range(num_nodes):
         image_path = os.path.join(topomap_dir, topomap_filenames[i])
         try:
-            topomap.append(PILImage.open(image_path))
+            img = PILImage.open(image_path)
+            img.load() # Force load the image into memory to be thread-safe
+            topomap.append(img)
         except Exception as e:
             raise IOError(f"Failed to load image '{image_path}': {e}")
 

@@ -15,3 +15,4 @@ kp_w: 0.2
 vel_teleop_topic: /cmd_vel_mux/input/teleop 
 vel_navi_topic: /cmd_vel
 vel_recovery_topic: /cmd_vel_mux/input/recovery
+use_stamped_vel: true # Set to true if your robot requires geometry_msgs/TwistStamped
