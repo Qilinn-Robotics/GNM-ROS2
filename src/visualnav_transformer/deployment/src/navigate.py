@@ -35,7 +35,7 @@ from visualnav_transformer.train.vint_train.training.train_utils import get_acti
 # CONSTANTS
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_WEIGHTS_PATH = os.path.join(SCRIPT_DIR, "model_weights")
-ROBOT_CONFIG_PATH = os.path.join(SCRIPT_DIR, "config/robot.yaml")
+ROBOT_CONFIG_PATH = os.path.join(SCRIPT_DIR, "config/gnm_config_turtlebot.yaml")
 MODEL_CONFIG_PATH = os.path.join(SCRIPT_DIR, "config/models.yaml")
 TOPOMAP_IMAGES_DIR = os.path.join(SCRIPT_DIR, "../topomaps/images")
 
@@ -46,6 +46,7 @@ try:
     MAX_V = robot_config["max_v"]
     MAX_W = robot_config["max_w"]
     RATE = robot_config["frame_rate"]
+    TRAJ_SCALE_FLAG = bool(robot_config.get("trajs_scale_flag", False))
 except FileNotFoundError:
     raise FileNotFoundError(
         f"Robot config file not found at '{ROBOT_CONFIG_PATH}'. "
@@ -73,6 +74,7 @@ class NavigationNode(Node):
         self.num_diffusion_iters = num_diffusion_iters
         self.RATE = RATE
         self.MAX_V = MAX_V
+        self.TRAJ_SCALE_FLAG = TRAJ_SCALE_FLAG
         
         # Initialize state variables
         self.context_queue = []
@@ -208,6 +210,10 @@ class NavigationNode(Node):
                         ).prev_sample
 
                 naction = to_numpy(get_action(naction))
+
+                chosen_traj = naction[0].copy()
+                if self.model_params["normalize"] and self.TRAJ_SCALE_FLAG:
+                    chosen_traj *= self.MAX_V / self.RATE
                 sampled_actions_msg = Float32MultiArray()
                 sampled_actions_msg.data = np.concatenate(
                     (np.array([0]), naction.flatten())
@@ -216,7 +222,7 @@ class NavigationNode(Node):
                 
                 # Publish chosen trajectory (the first sample)
                 chosen_traj_msg = Float32MultiArray()
-                chosen_traj_msg.data = naction[0].flatten().tolist()
+                chosen_traj_msg.data = chosen_traj.flatten().tolist()
                 self.chosen_traj_pub.publish(chosen_traj_msg)
 
                 naction = naction[0]
@@ -269,8 +275,16 @@ class NavigationNode(Node):
                 self.closest_node = min(start + min_dist_idx + 1, self.goal_node)
             
             # Publish chosen trajectory
+            chosen_traj = waypoints[chosen_traj_idx].copy()
+            if self.model_params["normalize"] and self.TRAJ_SCALE_FLAG:
+                # Scale positional components only
+                if chosen_traj.ndim > 1:
+                    chosen_traj[:, :2] *= (self.MAX_V / self.RATE)
+                else:
+                    chosen_traj[:2] *= (self.MAX_V / self.RATE)
+
             chosen_traj_msg = Float32MultiArray()
-            chosen_traj_msg.data = waypoints[chosen_traj_idx].flatten().tolist()
+            chosen_traj_msg.data = chosen_traj.flatten().tolist()
             self.chosen_traj_pub.publish(chosen_traj_msg)
             
             # Normalize
@@ -421,18 +435,16 @@ def main(args: argparse.Namespace, device: torch.device):
 
 
 if __name__ == "__main__":
-    # Load defaults from YAML config
-    BRL_CONFIG_PATH = os.path.join(SCRIPT_DIR, "config/gnm_config_for_brlrobot.yaml")
     brl_defaults = {}
-    if os.path.exists(BRL_CONFIG_PATH):
+    if os.path.exists(ROBOT_CONFIG_PATH):
         try:
-            with open(BRL_CONFIG_PATH, "r") as f:
+            with open(ROBOT_CONFIG_PATH, "r") as f:
                 brl_defaults = yaml.safe_load(f) or {}
-            print(f"Loaded configuration from {BRL_CONFIG_PATH}")
+            print(f"Loaded configuration from {ROBOT_CONFIG_PATH}")
         except Exception as e:
-            print(f"Warning: Failed to load config from {BRL_CONFIG_PATH}: {e}")
+            print(f"Warning: Failed to load config from {ROBOT_CONFIG_PATH}: {e}")
     else:
-        print(f"Warning: Config file {BRL_CONFIG_PATH} not found. Using hardcoded defaults.")
+        print(f"Warning: Config file {ROBOT_CONFIG_PATH} not found. Using hardcoded defaults.")
 
     parser = argparse.ArgumentParser(
         description="Code to run GNM DIFFUSION EXPLORATION on the locobot"

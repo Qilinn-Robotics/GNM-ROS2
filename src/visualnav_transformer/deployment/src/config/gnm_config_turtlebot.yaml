@@ -10,7 +10,7 @@ device: "cuda"
 
 # --- Topomap Configuration ---
 # dir: "topomap" (default) - Name of the folder in deployment/topomaps/images/{topomap}
-dir: "simu_map0104_1"
+dir: "simu_0119_1"
 
 # goal_node: -1 (default) - Index of the goal node. -1 means the last node.
 goal_node: -1
@@ -31,16 +31,19 @@ radius: 4
 num_samples: 8
 
 # linear and angular speed limits for the robot
-max_v: 0.26 #0.4 # m/s
-max_w: 0.3 #0.8 # rad/s
+max_v: 0.5 #0.4 # m/s
+max_w: 1.5 #0.8 # rad/s
 # observation rate fo the robot
 frame_rate: 10 # Hz
 graph_rate: 0.3333 # Hz 
-control_frequency: 30 # (default:9)Hz 
+control_frequency: 20 # (default:9)Hz 
 
 # PD GAINS
 kp_v: 1.0
 kp_w: 0.2
+
+# Model config
+trajs_scale_flag: false
 
 # topic names (modify for different robots/nodes)
 vel_teleop_topic: /cmd_vel_mux/input/teleop 
